@@ -1,0 +1,102 @@
+---
+title: Lab 8
+format:
+    html:
+        css: styles.css
+---
+
+## Objectives {.unnumbered}
+
+This lab accompanies the Week 8 notes, [*Introduction to Shiny*](https://soton-fds.github.io/week08.html).
+
+- Build and run a Shiny app from an `R` script.
+- Add input widgets (`textInput`, `numericInput`, `selectInput`) to an app, and display their values with output widgets and render functions.
+- Use a reactive expression to compute a value that outputs depend on.
+- Build an interactive data visualiser with `ggplot2`.
+
+When you have finished the lab, there are more questions in `lab_08_practice.qmd`, including why reactive expressions matter, observers and buttons, exploring the penguins data with your visualiser, and deploying an app to `shinyapps.io` so that other people can use it.
+
+## About the Lab
+
+In this lab you will write most of your code in `R` scripts, not in this Quarto document.
+As in the Week 8 notes, we always write Shiny apps in `R` scripts: a rendered Quarto document is a static web page, with no `R` process behind it to run an app.
+Write all your Shiny apps in the `src/` subdirectory.
+Write your answers to the written questions in the solution boxes in this document.
+
+To run an app, open its script in RStudio and click the **Run App** button above the editor (see [Running Shiny Apps](https://soton-fds.github.io/week08.html#running-shiny-apps) in the Week 8 notes).
+While the app is running, your `R` console is busy serving it: stop the app with the stop icon in the console (or `Esc`) to get your prompt back.
+A running app does not pick up changes to its script, so after editing an app, save it and click **Run App** again.
+
+### Task 1: A First App
+
+- [ ] Open the file `src/app1.R`
+- [ ] Run the shiny app.
+- [ ] Add a `textOutput` to the `ui` which the `server` fills with a greeting using the name that has been entered: for example, "Hello Ada" if the name is Ada.
+- [ ] Add a `numericInput` to the `ui` for the user to input their age. Make the UI print the age somewhere.
+- [ ] Look up the [`selectInput` control](https://shiny.posit.co/r/reference/shiny/latest/selectinput.html). Add a `selectInput` control that lets you choose a favourite colour from a list. Make the UI print the selected colour somewhere.
+- [ ] **Extension:** Look up the `renderUI` function and use it to change the colour of the greeting to the chosen colour.
+
+#### Hint: Using renderUI to change greeting colour
+
+To dynamically change the colour of the greeting based on the selected colour, use `renderUI` in the server and `uiOutput` in the UI.
+`renderUI` can return HTML tags such as `span`, whose `style` argument sets the CSS used to display it.
+For example, this displays some text in blue:
+
+```r
+# In the ui:
+uiOutput("coloured_text")
+
+# In the server:
+output$coloured_text <- renderUI({
+  span(style = "color: blue;", "Some blue text")
+})
+```
+
+#### Before a Name Is Entered
+
+- [ ] Restart your app, and look at the heading and the greeting before you type a name. What do they show?
+- [ ] Use `req()` (see the Week 8 notes) so that the heading is just "Shiny App", and no greeting is displayed, until a name has been entered. Where is the best place to put the `req()` for the greeting?
+
+::: {.solution}
+
+:::
+
+#### The Reactive Graph
+
+Now look at how the parts of your finished app depend on each other.
+
+- [ ] Using the Reactive Programming section of the [Week 8 notes](https://soton-fds.github.io/week08.html), list the sources, conductors and endpoints in your app, and sketch its reactive graph.
+- [ ] Which endpoints re-run when the user changes only the colour? Which re-run when they change only the name?
+
+::: {.solution}
+
+:::
+
+### Task 2: A Data Visualiser
+
+The file `src/data/penguins.csv` contains the penguins data from the Week 8 notes: body measurements of 344 penguins of three species, recorded on three islands in Antarctica between 2007 and 2009.
+Write a new app in `src/` that is a flexible visualiser for this data.
+
+As in the data explorer in the Week 8 notes, read the data once, before the `ui`, rather than inside the server.
+When Shiny runs an app, it uses the app's own folder (here `src/`) as the working directory, so the app should read `"data/penguins.csv"`, not `"src/data/penguins.csv"`.
+(If you run the script line by line in the console instead, the working directory is the project folder, so the same path will not be found.)
+
+The visualiser should allow the user to:
+
+- Select numerical variables for the $x$ and $y$ axes of a plot (using `selectInput`) and render the plot. *Hint: a `selectInput` gives you a string, such as `"bill_length_mm"`, rather than a column. Inside `aes()`, `.data[[input$x_var]]` refers to the column whose name is stored in `input$x_var`.*
+- Select a categorical variable to use to colour the points on the plot.
+- Enter friendly $x$- and $y$-axis labels, and a title.
+- Create a `reactive` expression that filters the dataset based on another categorical variable.
+
+Once your app can filter the data:
+
+- [ ] Plot body mass against flipper length for Adelie penguins only, then for Gentoo penguins only. Compare the two plots: how could they mislead someone comparing the two species?
+- [ ] Change your app so that the axes stay the same whatever is filtered. (Hint: see how the data explorer in the Week 8 notes fixes its axes. Here, the limits need to depend on the variables chosen.)
+
+::: {.solution}
+
+:::
+
+## Finished? {.unnumbered}
+
+Carry on with the questions in `lab_08_practice.qmd`.

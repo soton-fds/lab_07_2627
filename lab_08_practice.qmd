@@ -1,0 +1,117 @@
+---
+title: Lab 8 Practice Questions
+format:
+    html:
+        css: styles.css
+---
+
+## About these questions {.unnumbered}
+
+These questions are for extra practice after Lab 8.
+Tasks 1 and 2 follow on from Task 1 of the lab, and use the app in `src/samples.R`.
+Tasks 3–7 follow on from Task 2 of the lab, and build on your visualiser of the penguins data (Task 5 also uses ideas from Task 1).
+As in the lab, write your Shiny apps in the `src/` subdirectory, and your answers to the questions in this document.
+Questions marked **Extension** are more challenging, and the question marked **Challenge** is much harder still.
+
+### Task 1: Why Use a Reactive Expression?
+
+This task follows on from Task 1 of the lab.
+
+The file `src/samples.R` contains the app from the Reactive Expressions section of the [Week 8 notes](https://soton-fds.github.io/week08.html), with two changes: it draws a sample of only 10 points, and it also displays them in a table.
+
+- [ ] Run the app and change $\mu_1$ a few times. Check that the plot, the sample means and the table all describe the same points.
+- [ ] Copy `src/samples.R` to a new file, `src/samples_no_reactive.R`. In the copy, remove the reactive expression `samples()` from the server: instead, draw the sample inside each of the three `render*` functions. Run the new app. What has gone wrong?
+- [ ] Explain what you have seen, using the reactive graph of each version of the app.
+- [ ] Suppose you tried to fix the problem by calling `set.seed(1)` at the start of each `render*` function. Would the outputs agree? Why is a reactive expression still the better solution?
+
+::: {.solution}
+
+:::
+
+### Task 2: A Resample Button
+
+This task follows on from Task 1 of the lab, and uses the app in `src/samples.R` from Task 1 above.
+
+At the moment, the app draws a new sample every time $\mu_1$ or $\mu_2$ changes, so the points jump around as well as moving.
+
+- [ ] Copy `src/samples.R` to a new file, `src/resample.R`. Change the copy so that changing $\mu_1$ or $\mu_2$ moves the *same* points, and a new sample is drawn only when the user presses a "Draw a new sample" button. Use an `actionButton`, `observeEvent` and a `reactiveVal`. (Hint: if `z` is drawn with `rnorm(10)`, then `mu + z` is a sample with mean `mu` and standard deviation 1.)
+- [ ] Sketch the reactive graph of your new app. What re-runs when the user changes $\mu_1$? What re-runs when they press the button?
+- [ ] Your `reactiveVal` probably holds the standard normal sample (`z`), not the sample that is plotted. Why would it be a bad idea to store the plotted sample in the `reactiveVal` instead?
+
+::: {.solution}
+
+:::
+
+### Task 3: Choosing the Filter Variable
+
+This task follows on from Task 2 of the lab.
+
+- [ ] **Extension:** Change your visualiser so that the user can choose *which* categorical variable to filter on, as well as the value to keep. *Hint: the values to choose from depend on the variable, so build that dropdown in the server with `renderUI`, as in Task 1 of the lab. `.data[[...]]` works inside `dplyr` functions such as `filter()` in the same way as in `aes()`:*
+
+```r
+library(tidyverse)
+# Run in the console, from the project folder
+penguins <- read_csv("src/data/penguins.csv")
+col <- "species"
+penguins |> filter(.data[[col]] == "Adelie")
+```
+
+::: {.solution}
+
+:::
+
+### Task 4: Exploring with Your Visualiser
+
+This task follows on from Task 2 of the lab, and uses your visualiser.
+
+- [ ] Use your visualiser to find the pair of measurements that best separates the three species. How confident are you in your answer, and what could mislead you?
+- [ ] Colour the points by sex. What are the grey points, and how many are there? Should your app show them? Change it to handle them in the way you think is best.
+
+::: {.solution}
+
+:::
+
+### Task 5: The Visualiser's Reactive Graph
+
+This task combines ideas from both tasks of the lab.
+
+- [ ] Sketch the reactive graph of your visualiser from Task 2 of the lab, as you did for your first app in Task 1 of the lab.
+- [ ] What re-runs when the user types a title? What re-runs when they choose a species? Is the data filtered again when the title changes?
+
+::: {.solution}
+
+:::
+
+### Task 6: Deploying an App
+
+This task follows on from Task 2 of the lab.
+
+Deploy your visualiser (or your app from Task 1 of the lab) to `shinyapps.io`:
+
+- Create a "Free" tier account
+- In RStudio go to `Tools > Global Options > Publishing`.
+- Click **Connect** and choose **ShinyApps.io**. (RStudio may require some apps to be installed).
+- Follow the prompts to authorize RStudio with your `shinyapps.io` account. (You'll need to copy/paste a token from the website).
+
+Once this is completed:
+
+- Open the app you want to deploy in RStudio.
+- Look for the **Publish** button (blue icon) in the upper-right corner of the editor pane.
+- Click it and select **Publish Application**.
+- Choose which files to include. Make sure you include `data/penguins.csv`: the deployed app runs from the same folder layout, which is another reason to read the data with a path relative to the app's own folder.
+- Click **Publish** and wait for the deployment to complete.
+- RStudio will automatically open your deployed app in a browser.
+
+Then share your published app with someone!
+As the Limitations section of the Week 8 notes points out, anyone with the link can use your app and see the data it displays.
+That is fine for penguins, but think carefully before deploying an app that shows personal data.
+
+### Task 7: Uploading a Dataset
+
+This task follows on from Task 2 of the lab.
+
+- [ ] **Challenge:** This goes well beyond the Week 8 notes. Modify your visualiser from Task 2 of the lab so that the user can *upload* a CSV file of their own, rather than the app always using `penguins.csv`. (Hint: look up `fileInput`.) There needs to be much more dynamic server-side logic in this case: for example, the choices in every dropdown depend on the columns of the uploaded file.
+
+No solution is provided for this task.
+It is really quite challenging, bringing together everything from both lab tasks along with several new ideas, and I would never expect you to do something so difficult in an assessment.
+It is here as a challenge if you want to see how far you can take an app.
