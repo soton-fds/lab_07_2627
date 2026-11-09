@@ -1,0 +1,40 @@
+# R and Quarto .gitignore
+
+# History files
+.Rhistory
+.Rapp.history
+
+# Session data files
+.RData
+
+# User-specific files
+.Ruserdata
+
+# RStudio files
+.Rproj.user/
+*.Rproj
+
+# Quarto output
+*.html
+*.pdf
+*.docx
+*.pptx
+
+# Quarto cache and temp
+_quarto_cache/
+_quarto_temp/
+
+# Knitr cache
+*_cache/
+*_files/
+
+# Logs
+*.log
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+results/*

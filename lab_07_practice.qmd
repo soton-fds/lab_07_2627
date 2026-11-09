@@ -1,0 +1,295 @@
+---
+title: Lab 7 Practice Questions
+format:
+    html:
+        css: styles.css
+---
+
+## About these questions {.unnumbered}
+
+These questions are for extra practice after Lab 7, using the same LEGO database.
+Tasks 1–3 follow on from Task 1 of the lab (reading SQL and the database schema), and Tasks 4–6 from Task 2 of the lab (`dbplyr`).
+Questions marked **Extension** are more challenging.
+
+As in the lab, you are not expected to write SQL yourself: you will read SQL queries in Tasks 1–3, and write `dplyr` code in Tasks 4–6.
+The schema of the database is shown in `downloads_schema.png`, and in the lab.
+
+The cell below connects to the database and creates the lazy tables used in Tasks 4–6.
+
+```{r}
+#| message: false
+library(DBI)
+library(tidyverse)
+library(dbplyr)
+
+con <- dbConnect(RSQLite::SQLite(), "data/lego.sqlite")
+
+sets <- tbl(con, "sets")
+themes <- tbl(con, "themes")
+inventories <- tbl(con, "inventories")
+inventory_parts <- tbl(con, "inventory_parts")
+inventory_sets <- tbl(con, "inventory_sets")
+colors <- tbl(con, "colors")
+```
+
+### Task 1: More SQL Reading
+
+This task follows on from Task 1 of the lab.
+The next two queries look alike, but answer different questions.
+
+```{sql}
+#| connection: con
+-- Query C
+SELECT year, COUNT(*) AS n_sets
+FROM sets
+WHERE num_parts >= 1000
+GROUP BY year
+ORDER BY year;
+```
+
+```{sql}
+#| connection: con
+-- Query D
+SELECT year, COUNT(*) AS n_sets
+FROM sets
+GROUP BY year
+HAVING COUNT(*) >= 500
+ORDER BY year;
+```
+
+- [ ] Write down the question that each query answers. Which query filters individual sets, and which filters whole years?
+
+::: {.solution}
+
+:::
+
+A colleague wants to know how many sets there are in *every* theme, including any themes with no sets.
+They have tried three queries, each of which lists the five themes with the fewest sets.
+
+```{sql}
+#| connection: con
+-- Query E
+SELECT themes.id, themes.name, COUNT(*) AS n_sets
+FROM themes
+    JOIN sets ON sets.theme_id = themes.id
+GROUP BY themes.id, themes.name
+ORDER BY n_sets, themes.id
+LIMIT 5;
+```
+
+```{sql}
+#| connection: con
+-- Query F
+SELECT themes.id, themes.name, COUNT(*) AS n_sets
+FROM themes
+    LEFT JOIN sets ON sets.theme_id = themes.id
+GROUP BY themes.id, themes.name
+ORDER BY n_sets, themes.id
+LIMIT 5;
+```
+
+```{sql}
+#| connection: con
+-- Query G
+SELECT themes.id, themes.name, COUNT(sets.set_num) AS n_sets
+FROM themes
+    LEFT JOIN sets ON sets.theme_id = themes.id
+GROUP BY themes.id, themes.name
+ORDER BY n_sets, themes.id
+LIMIT 5;
+```
+
+- [ ] Compare the row for the theme `Race` (id 27) in the three results. Explain what each query does with a theme that has no sets. Which query does your colleague want?
+
+::: {.solution}
+
+:::
+
+- [ ] Write down the question that the query below answers. How is it related to Query G?
+- [ ] Read the second query below. What does it count? What does its result suggest about why some themes have no sets?
+
+```{sql}
+#| connection: con
+SELECT name
+FROM themes
+WHERE id NOT IN (
+    SELECT theme_id
+    FROM sets
+);
+```
+
+```{sql}
+#| connection: con
+SELECT COUNT(*) AS n_themes
+FROM themes
+WHERE id NOT IN (SELECT theme_id FROM sets)
+    AND id IN (SELECT parent_id FROM themes WHERE parent_id IS NOT NULL);
+```
+
+::: {.solution}
+
+:::
+
+### Task 2: More of the LEGO Schema
+
+This task follows on from the `CREATE TABLE` question in Task 1 of the lab.
+Here are the statements that were used to create three more of the tables.
+
+```sql
+CREATE TABLE themes (
+    id INTEGER,
+    name TEXT,
+    parent_id INTEGER,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE sets (
+    set_num TEXT,
+    name TEXT,
+    year INTEGER,
+    theme_id INTEGER,
+    num_parts INTEGER,
+    PRIMARY KEY (set_num),
+    FOREIGN KEY (theme_id) REFERENCES themes(id)
+);
+
+CREATE TABLE colors (
+    id INTEGER,
+    name TEXT,
+    rgb TEXT,
+    is_trans TEXT,
+    PRIMARY KEY (id)
+);
+```
+
+- [ ] What does `themes.parent_id` refer to? What kind of relationship is this? What is missing from the `CREATE TABLE` statement for `themes`?
+- [ ] Use the queries below to see what values `colors.is_trans` and `inventory_parts.is_spare` contain. Which column type would have been a better choice?
+
+```{sql}
+#| connection: con
+SELECT is_trans, COUNT(*) AS n_colours
+FROM colors
+GROUP BY is_trans;
+```
+
+```{sql}
+#| connection: con
+SELECT is_spare, COUNT(*) AS n_rows
+FROM inventory_parts
+GROUP BY is_spare;
+```
+
+::: {.solution}
+
+:::
+
+### Task 3: Critiquing a Schema
+
+This task follows on from Task 1 of the lab, but uses a different database.
+A small library has designed the database below, to record its members, its books and its loans.
+
+```sql
+CREATE TABLE members (
+    member_id INTEGER,
+    name TEXT,
+    email TEXT,
+    date_of_birth TEXT,
+    PRIMARY KEY (member_id)
+);
+
+CREATE TABLE books (
+    isbn TEXT,
+    title TEXT,
+    authors TEXT,  -- for example 'Wickham, H.; Grolemund, G.'
+    year_published TEXT,
+    price TEXT
+);
+
+CREATE TABLE loans (
+    loan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER,
+    member_name TEXT,
+    isbn TEXT,
+    date_borrowed DATE,
+    date_returned DATE,
+    FOREIGN KEY (member_id) REFERENCES members(member_id)
+);
+```
+
+- [ ] Find as many problems with this design as you can. For each one, say what could go wrong.
+- [ ] How would you store the authors of each book instead? What kind of relationship is there between books and authors?
+- [ ] Which columns hold personal data? Which of them does the library need, and who should be able to see them?
+- [ ] **Extension:** Write corrected `CREATE TABLE` statements.
+
+::: {.solution}
+
+:::
+
+### Task 4: More `dbplyr`
+
+This task follows on from Task 2 of the lab.
+
+- [ ] Write `dplyr` code that answers the same question as Query B from Task 1 of the lab, which counts the sets for each theme *name*. Use `show_query()` to compare the SQL that `dbplyr` generates with Query B. (Hint: what happens to the two `name` columns when you join `sets` to `themes`?)
+
+::: {.solution}
+
+:::
+
+In the lab, we counted the total number of parts of each colour, in the database:
+
+```{r}
+#| eval: false
+inventory_parts |>
+    group_by(color_id) |>
+    summarise(total = sum(quantity, na.rm = TRUE), .groups = "drop") |>
+    collect()
+```
+
+- [ ] Extend this pipeline to find the names of the five most common colours. Do as much of the work as possible in the database.
+- [ ] Does your answer include spare parts? Change your code so that it doesn't. Does the answer change?
+
+::: {.solution}
+
+:::
+
+A friend is interested in three themes, which they have stored in a tibble:
+
+```{r}
+chosen <- tibble(name = c("Star Wars", "Harry Potter", "Ninjago"))
+```
+
+- [ ] Try joining `themes` to `chosen`. What happens, and how can you fix it?
+- [ ] Count the number of sets in each of the three chosen themes. How many rows of `themes` matched each name? Does your count for Star Wars include every Star Wars set?
+
+::: {.solution}
+
+:::
+
+### Task 5: Theme Families
+
+This task combines both tasks of the lab.
+In the lab, we found that counting sets by theme gives a misleading picture of which themes are the most popular, partly because large themes are split into many sub-themes.
+
+- [ ] Count the sets in each *theme family*: a theme together with all of its sub-themes. For now, assume that a family is a theme with no parent, together with the themes whose parent it is. (Hint: you can join `themes` to itself. `if_else()` from the Week 2 notes is also useful.)
+- [ ] Which families have the most sets? What would you now conclude about the most popular theme, and how confident are you?
+- [ ] **Extension:** Your answer probably includes `Advent Sub-Set`, but this theme itself has a parent. How deep does the nesting of themes go? Count the sets in each *top-level* theme, which has no parent.
+
+::: {.solution}
+
+:::
+
+### Task 6: Checking the Data
+
+This task follows on from Task 2 of the lab.
+
+- [ ] **Extension:** Each set has a `num_parts` column, but its parts are also listed in `inventory_parts`. For how many sets do the two agree? (Hint: think about what we found in Task 1 of the lab about spare parts and inventory versions.) What can you say about the sets for which they disagree?
+
+::: {.solution}
+
+:::
+
+We have finished with the database, so we close the connection:
+
+```{r}
+dbDisconnect(con)
+```
