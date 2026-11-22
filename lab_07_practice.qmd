@@ -61,6 +61,12 @@ ORDER BY year;
 
 ::: {.solution}
 
+Query C answers *for each year, how many sets with at least 1,000 parts were released?*
+`WHERE` is evaluated before `GROUP BY`, so it removes the smaller sets first, and the remaining large sets are then counted by year.
+Years with no large sets do not appear at all, so the result starts in 1985.
+
+Query D answers *in which years were at least 500 sets released, and how many?*
+`HAVING` is evaluated after `GROUP BY`, so it keeps or removes whole years, based on the number of sets in each: only 2011–2016 pass.
 :::
 
 A colleague wants to know how many sets there are in *every* theme, including any themes with no sets.
@@ -103,6 +109,15 @@ LIMIT 5;
 
 ::: {.solution}
 
+Query E uses an inner `JOIN`, which keeps only the themes that match at least one set.
+A theme with no sets, such as `Race`, disappears from the result altogether, so the smallest count in Query E is 1.
+
+Query F uses a `LEFT JOIN`, which keeps every theme.
+A theme with no sets is kept as a single row, with `NULL` in all of the columns from `sets`.
+But `COUNT(*)` counts *rows*, including that one, so `Race` is reported as having 1 set, just like `Castle` (id 25), which really does have one.
+
+Query G also uses a `LEFT JOIN`, but `COUNT(sets.set_num)` counts only the rows in which `set_num` is not `NULL`, so `Race` correctly has 0 sets.
+Query G is the one your colleague wants.
 :::
 
 - [ ] Write down the question that the query below answers. How is it related to Query G?
@@ -128,6 +143,13 @@ WHERE id NOT IN (SELECT theme_id FROM sets)
 
 ::: {.solution}
 
+The first query answers *which themes have no sets?*
+The subquery lists the `theme_id` of every set, and the outer query keeps the themes whose `id` is not in that list.
+These are exactly the themes with `n_sets` equal to 0 in Query G; there are 39 of them.
+
+The second query counts the themes that have no sets of their own (the first condition) *and* are the parent of at least one other theme (the second condition): 13 of the 39.
+For these themes, the sets are recorded under their sub-themes instead.
+The other 26 themes have no sets in this database at all.
 :::
 
 ### Task 2: More of the LEGO Schema
@@ -181,6 +203,15 @@ GROUP BY is_spare;
 
 ::: {.solution}
 
+`parent_id` refers to the `id` of another row of the *same* table: for example, theme 220 (`City`) has parent 217 (`Advent Sub-Set`).
+This is a one-to-many relationship between `themes` and itself: one parent theme can have many sub-themes, but each theme has at most one parent.
+The schema figure in the lab does not show it.
+
+The statement for `themes` declares no `FOREIGN KEY (parent_id) REFERENCES themes(id)`, so nothing records that the two columns are linked, and a database that checks foreign keys could not stop a theme from having a parent that does not exist.
+
+Both `is_trans` and `is_spare` hold the text `'t'` or `'f'`.
+A `BOOLEAN` column would say what the columns mean and, in a database that checks types, stop other values (such as `'yes'` or `'T'`) from creeping in.
+(SQLite is less strict about both types and foreign keys than most databases: see *Using SQLite* in the Week 7 notes.)
 :::
 
 ### Task 3: Critiquing a Schema
@@ -223,6 +254,70 @@ CREATE TABLE loans (
 
 ::: {.solution}
 
+There are several problems:
+
+- **`books` has no primary key.** The same book could be entered twice, and there is no way to identify a single book. `isbn` is a natural choice of key.
+- **`loans.isbn` is not a foreign key.** A loan could refer to a book that the library does not have. (It *cannot* be a foreign key at the moment, because a foreign key must refer to a primary key, and `books` does not have one.)
+- **Wrong column types.** `year_published` should be an `INTEGER`, `price` a `REAL` and `date_of_birth` a `DATE`. Stored as text, they cannot be sorted or compared correctly (as text, `'9.99'` sorts after `'10.50'`), and nothing stops values such as `'about 2010'` from being entered.
+- **`loans.member_name` repeats `members.name`.** The name is stored again for every loan, and if a member changes their name, the two tables will disagree. It can always be found by joining `loans` to `members`, so it should be removed.
+- **`email` is not `UNIQUE`.** Two members could be registered with the same email address, which is probably a mistake (or the same person registered twice).
+- **Copies.** A library often has several copies of the same book, but a loan only records the ISBN, so we cannot tell *which* copy is on loan, or how many copies are available.
+
+`authors` holds a list of names in a single column, which is not tidy (see the Week 4 notes): to find all the books by one author, we would have to search inside the text of every row.
+Books and authors are in a many-to-many relationship: a book can have several authors, and an author can write several books.
+As we saw for sets and parts in the lab, this needs an `authors` table, with one row per author, and a linking table `book_authors`, with one row for each author of each book.
+
+`name`, `email` and `date_of_birth` are personal data, and are subject to data protection law (see the Week 7 notes and [*Data Ethics*](https://soton-fds.github.io/ethics.html)).
+The library needs a way to contact its members, but it is not clear that it needs their date of birth (unless, for example, children's membership works differently), and it should not collect data it does not need.
+Staff issuing books need to see names; an analyst studying which books are popular needs none of these columns, and could be given only summaries.
+
+For the extension, one possible design is:
+
+```sql
+CREATE TABLE members (
+    member_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    email TEXT UNIQUE
+);
+
+CREATE TABLE books (
+    isbn TEXT PRIMARY KEY,
+    title TEXT,
+    year_published INTEGER,
+    price REAL
+);
+
+CREATE TABLE authors (
+    author_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT
+);
+
+CREATE TABLE book_authors (
+    isbn TEXT,
+    author_id INTEGER,
+    PRIMARY KEY (isbn, author_id),
+    FOREIGN KEY (isbn) REFERENCES books(isbn),
+    FOREIGN KEY (author_id) REFERENCES authors(author_id)
+);
+
+CREATE TABLE copies (
+    copy_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    isbn TEXT,
+    FOREIGN KEY (isbn) REFERENCES books(isbn)
+);
+
+CREATE TABLE loans (
+    loan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id INTEGER,
+    copy_id INTEGER,
+    date_borrowed DATE,
+    date_returned DATE,  -- NULL if the copy has not been returned yet
+    FOREIGN KEY (member_id) REFERENCES members(member_id),
+    FOREIGN KEY (copy_id) REFERENCES copies(copy_id)
+);
+```
+
+The primary key of `book_authors` combines both of its columns, like the key of `inventory_parts` in the lab: each pair of book and author should appear once.
 :::
 
 ### Task 4: More `dbplyr`
@@ -233,6 +328,25 @@ This task follows on from Task 2 of the lab.
 
 ::: {.solution}
 
+Both `sets` and `themes` have a column called `name`, so a join gives two columns, `name.x` and `name.y` (see the Week 5 notes).
+Selecting and renaming the columns we need from `themes` first avoids this:
+
+```{r}
+sets_by_theme_name <- sets |>
+    inner_join(
+        themes |> select(id, theme_name = name),
+        by = c("theme_id" = "id")
+    ) |>
+    group_by(theme_name) |>
+    summarise(n_sets = n(), .groups = "drop") |>
+    arrange(desc(n_sets)) |>
+    head(5)
+
+show_query(sets_by_theme_name)
+collect(sets_by_theme_name)
+```
+
+The generated SQL does the join in a subquery, and then groups its result, but it gives the same answer as Query B.
 :::
 
 In the lab, we counted the total number of parts of each colour, in the database:
@@ -250,6 +364,33 @@ inventory_parts |>
 
 ::: {.solution}
 
+The join to `colors`, the sorting and the `head()` can all be done in the database, so only five rows are sent to `R`:
+
+```{r}
+inventory_parts |>
+    group_by(color_id) |>
+    summarise(total = sum(quantity, na.rm = TRUE), .groups = "drop") |>
+    inner_join(colors, by = c("color_id" = "id")) |>
+    arrange(desc(total)) |>
+    head(5) |>
+    collect()
+```
+
+This includes spare parts.
+To leave them out, we filter on `is_spare`, which holds the *text* `'f'` for parts that are not spares:
+
+```{r}
+inventory_parts |>
+    filter(is_spare == "f") |>
+    group_by(color_id) |>
+    summarise(total = sum(quantity, na.rm = TRUE), .groups = "drop") |>
+    inner_join(colors, by = c("color_id" = "id")) |>
+    arrange(desc(total)) |>
+    head(5) |>
+    collect()
+```
+
+The totals fall, but the five most common colours, and their order, stay the same.
 :::
 
 A friend is interested in three themes, which they have stored in a tibble:
@@ -263,6 +404,35 @@ chosen <- tibble(name = c("Star Wars", "Harry Potter", "Ninjago"))
 
 ::: {.solution}
 
+`themes` is a table in the database, but `chosen` is a tibble in `R`, so the join fails:
+
+```{r}
+#| error: true
+themes |> inner_join(chosen, by = "name")
+```
+
+As in the Week 7 notes, `copy = TRUE` copies `chosen` into a temporary table in the database, so that the join can run there:
+
+```{r}
+themes |>
+    inner_join(chosen, by = "name", copy = TRUE) |>
+    collect()
+```
+
+Six different themes are called `Star Wars`, while `Harry Potter` and `Ninjago` match one theme each.
+To count the sets, we join the matching themes to `sets`:
+
+```{r}
+themes |>
+    inner_join(chosen, by = "name", copy = TRUE) |>
+    select(theme_id = id, theme_name = name) |>
+    inner_join(sets, by = "theme_id") |>
+    count(theme_name) |>
+    collect()
+```
+
+This counts the sets in all six themes called `Star Wars`, but not the sets in sub-themes of Star Wars that have other names, so it misses many Star Wars sets.
+Task 5 groups the sub-themes together.
 :::
 
 ### Task 5: Theme Families
@@ -276,6 +446,73 @@ In the lab, we found that counting sets by theme gives a misleading picture of w
 
 ::: {.solution}
 
+For each theme, we look up its parent by joining `themes` to a copy of itself.
+Its family is its parent, if it has one, and otherwise the theme itself:
+
+```{r}
+theme_family <- themes |>
+    select(theme_id = id, parent_id) |>
+    mutate(family_id = if_else(is.na(parent_id), theme_id, parent_id))
+
+sets |>
+    inner_join(theme_family, by = "theme_id") |>
+    count(family_id) |>
+    inner_join(themes |> select(family_id = id, family = name), by = "family_id") |>
+    arrange(desc(n)) |>
+    head(6) |>
+    collect()
+```
+
+We count by `family_id` rather than by name, because names are not unique, and only then join `themes` to itself to look up each family's name.
+
+`Advent Sub-Set` is a family of advent calendars, in which each day counts as a set, and `Service Packs` are spare parts, so the count of sets is still a poor measure of popularity.
+Star Wars, with over 500 sets, is the largest family of building sets here.
+We should not be very confident in any ranking, though: the counts measure how many products were released, not how many were sold, they depend on how the themes in the database have been organised, and the database contains no sales data at all.
+
+For the extension, we join each theme to its parent and its grandparent, and check whether any grandparent has a parent of its own:
+
+```{r}
+theme_levels <- themes |>
+    select(theme_id = id, parent_id) |>
+    left_join(
+        themes |> select(parent_id = id, grandparent_id = parent_id),
+        by = "parent_id"
+    ) |>
+    left_join(
+        themes |> select(grandparent_id = id, great_grandparent_id = parent_id),
+        by = "grandparent_id"
+    )
+
+theme_levels |>
+    summarise(
+        n_with_parent = sum(!is.na(parent_id), na.rm = TRUE),
+        n_with_grandparent = sum(!is.na(grandparent_id), na.rm = TRUE),
+        n_with_great_grandparent = sum(!is.na(great_grandparent_id), na.rm = TRUE)
+    ) |>
+    collect()
+```
+
+Some themes have a grandparent, but none has a great-grandparent, so themes are nested at most three levels deep.
+A theme's top-level theme is therefore its grandparent if it has one, otherwise its parent if it has one, and otherwise the theme itself:
+
+```{r}
+sets |>
+    inner_join(theme_levels, by = "theme_id") |>
+    mutate(
+        top_id = case_when(
+            !is.na(grandparent_id) ~ grandparent_id,
+            !is.na(parent_id) ~ parent_id,
+            TRUE ~ theme_id
+        )
+    ) |>
+    count(top_id) |>
+    inner_join(themes |> select(top_id = id, top_theme = name), by = "top_id") |>
+    arrange(desc(n)) |>
+    head(6) |>
+    collect()
+```
+
+At the top level, `Town` (which includes `City`) has the most sets, and the advent calendars are now counted under `Seasonal`.
 :::
 
 ### Task 6: Checking the Data
@@ -286,6 +523,75 @@ This task follows on from Task 2 of the lab.
 
 ::: {.solution}
 
+First, we add up the quantities in each set's inventories, and compare the total with `num_parts`:
+
+```{r}
+inventory_parts |>
+    inner_join(inventories, by = c("inventory_id" = "id")) |>
+    group_by(set_num) |>
+    summarise(total = sum(quantity, na.rm = TRUE), .groups = "drop") |>
+    inner_join(sets, by = "set_num") |>
+    summarise(
+        n_sets = n(),
+        n_agree = sum(total == num_parts, na.rm = TRUE)
+    ) |>
+    collect()
+```
+
+Only about half agree.
+This total includes spare parts, which are not counted in `num_parts`.
+Leaving them out makes a big difference:
+
+```{r}
+inventory_parts |>
+    filter(is_spare == "f") |>
+    inner_join(inventories, by = c("inventory_id" = "id")) |>
+    group_by(set_num) |>
+    summarise(total = sum(quantity, na.rm = TRUE), .groups = "drop") |>
+    inner_join(sets, by = "set_num") |>
+    summarise(
+        n_sets = n(),
+        n_agree = sum(total == num_parts, na.rm = TRUE)
+    ) |>
+    collect()
+```
+
+The total also adds up every inventory of a set, so a set with several inventory versions is counted several times.
+Keeping only the first version of each inventory removes this:
+
+```{r}
+part_totals <- inventory_parts |>
+    filter(is_spare == "f") |>
+    inner_join(
+        inventories |> filter(version == 1),
+        by = c("inventory_id" = "id")
+    ) |>
+    group_by(set_num, inventory_id) |>
+    summarise(total = sum(quantity, na.rm = TRUE), .groups = "drop") |>
+    inner_join(sets, by = "set_num")
+
+part_totals |>
+    summarise(
+        n_sets = n(),
+        n_agree = sum(total == num_parts, na.rm = TRUE),
+        n_fewer = sum(total < num_parts, na.rm = TRUE)
+    ) |>
+    collect()
+```
+
+Now almost all of the sets agree.
+For every set that disagrees, the inventory lists *fewer* parts than `num_parts`.
+Some of these are sets that contain other sets, such as advent calendars, whose parts are listed in the inventories of the sets they contain (through `inventory_sets`), rather than in their own:
+
+```{r}
+part_totals |>
+    filter(total < num_parts) |>
+    semi_join(inventory_sets, by = "inventory_id") |>
+    count() |>
+    collect()
+```
+
+For the rest, the data do not tell us why the totals differ; most differ by only a few parts.
 :::
 
 We have finished with the database, so we close the connection:

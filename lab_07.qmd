@@ -91,6 +91,18 @@ WHERE part_categories.name = 'Minifigs';
 
 ::: {.solution}
 
+1. *How many sets are in the database?* One row and one column: there are 11,673 sets.
+2. *Which five sets have the most parts, and in which year was each released?* Five rows and three columns. `ORDER BY num_parts DESC` sorts the sets from largest to smallest, and `LIMIT 5` keeps the first five. The largest is the Taj Mahal (5,922 parts). Note that not every "set" is a boxed model: the Window Exploration Bag is a bag of loose parts.
+3. *In which year were the most sets released, and how many?* `GROUP BY year` makes one row per year, `COUNT(*)` counts the sets in each, and `ORDER BY ... LIMIT 1` keeps the year with the largest count: one row and two columns, 713 sets in 2014. (If two years had tied, `LIMIT 1` would hide one of them.)
+4. *How many different parts are in the "Minifigs" category?* The join attaches each part's category to it, and `WHERE` keeps the parts whose category is called `Minifigs`: 8,556 parts. Each row of `parts` is a different part, because `part_num` is its primary key, so this counts *different* parts rather than the number of minifig pieces that have been made.
+
+Whether 8,556 is the answer to "how many minifig parts are there?" depends on what you count as a minifig part: two other categories also contain figures and their accessories.
+
+```{sql}
+#| connection: con
+SELECT * FROM part_categories WHERE id IN (13, 27, 57);
+```
+
 :::
 
 A colleague wants to know which LEGO theme has the most sets.
@@ -133,6 +145,18 @@ SELECT name, year, num_parts FROM sets WHERE theme_id = 501 LIMIT 10;
 
 ::: {.solution}
 
+Query A groups the sets by theme `id`, so it answers *which five themes have the most sets?*, treating every row of `themes` as a separate theme.
+Query B groups by theme `name`, so it answers *which five theme names are shared by the most sets?*: themes with the same name are merged into a single group.
+
+The two differ because theme names are not unique.
+There are six different themes called `Technic`, each with a different parent theme, and Query B adds their sets together.
+Only `id`, the primary key, is guaranteed to identify a single theme.
+
+Neither query really tells us which theme is the most *popular*.
+The top theme in Query A is `Gear`, which is LEGO merchandise (watches, clocks, storage boxes), and most of its "sets" have no parts at all.
+Fourth in Query A is a theme called `City` (id 220), but its parent is `Advent Sub-Set`: each of its "sets" is a single day of a City advent calendar.
+In Query B, `Supplemental` comes top, and its sets are packs of spare bricks.
+A count of sets measures how many products were released, not how many were sold, and the database contains no sales data at all.
 :::
 
 Next, we look at how the database is structured.
@@ -168,6 +192,35 @@ LIMIT 6;
 
 ::: {.solution}
 
+Every line in the figure joins a foreign key to the primary key of another table:
+
+| Line | Relationship |
+|:-----|:-------------|
+| `themes.id` -- `sets.theme_id` | One theme has many sets; each set has one theme. |
+| `part_categories.id` -- `parts.part_cat_id` | One category has many parts; each part has one category. |
+| `sets.set_num` -- `inventories.set_num` | One set has many inventories; each inventory belongs to one set. |
+| `inventories.id` -- `inventory_parts.inventory_id` | One inventory has many rows in `inventory_parts`; each row belongs to one inventory. |
+| `parts.part_num` -- `inventory_parts.part_num` | One part has many rows in `inventory_parts`; each row is for one part. |
+| `colors.id` -- `inventory_parts.color_id` | One colour has many rows in `inventory_parts`; each row is in one colour. |
+| `inventories.id` -- `inventory_sets.inventory_id` | One inventory has many rows in `inventory_sets`; each row belongs to one inventory. |
+| `sets.set_num` -- `inventory_sets.set_num` | One set has many rows in `inventory_sets`; each row is for one set. |
+
+So every line is one-to-many, read from the primary key to the foreign key (or many-to-one, read the other way).
+This is no accident: a primary key is unique, so each row on the foreign key side can match only one row on the primary key side, whereas nothing stops many rows from sharing the same foreign key value.
+
+The query counts the inventories of each set, and shows that set `421-2` has five, which are different *versions* of its parts list.
+Only 8 sets have more than one inventory (and 3 have none), so the relationship is *almost* one-to-one, but the database allows one-to-many.
+This matters when joining: a query that joins `sets` to `inventories` would count set `421-2` five times.
+
+`sets` and `parts` are many-to-many: a set contains many different parts, and a part appears in many sets.
+A single line cannot represent this, because a column holds one value in each row.
+Instead, it goes through a linking table with one row for each combination: each set has an inventory (`inventories`), and `inventory_parts` has a row for each part, in each colour, in each inventory.
+This is why the natural key of `inventory_parts` combines several columns, as we will see next.
+
+`inventory_sets` is another linking table, for sets that contain other sets.
+The third query joins each of its rows to the inventory, and then to the set that the inventory belongs to, giving the name of the containing set alongside each set it contains.
+For example, the inventory of the *Star Wars Super Pack 2 in 1* contains the two sets 75048 and 75053.
+An inventory can contain many sets (up to 30) and a set can appear in many inventories (up to 12), so this relationship between `inventories` and `sets` is many-to-many too.
 :::
 
 Finally, here is the `CREATE TABLE` statement that was used to create `inventory_parts`.
@@ -210,6 +263,13 @@ WHERE inventory_id = 3 AND part_num = '33291' AND color_id = 191;
 
 ::: {.solution}
 
+Without a primary key, nothing stops the same row from being inserted twice, which would double-count parts.
+There is also no way to identify one particular row, for example to `UPDATE` or `DELETE` it, other than by listing all of its values.
+
+Each row of `inventory_parts` says how many of one part, in one colour, are in one inventory, so a natural key combines `inventory_id`, `part_num` and `color_id`.
+The query groups the rows by these three columns, keeps the groups with more than one row, and counts those groups: 27,324 combinations appear more than once, so these three columns are not a valid key.
+The example shows why: inventory 3 contains three of part 33291 in colour 191, plus one more as a *spare*.
+Adding `is_spare` to the key fixes this: no combination of all four columns is repeated, so `PRIMARY KEY (inventory_id, part_num, color_id, is_spare)` would be a valid key.
 :::
 
 ### Task 2: Using `dbplyr`
@@ -231,17 +291,53 @@ inventory_parts <- tbl(con, "inventory_parts")
 
 ::: {.solution}
 
+```{r}
+sets
+```
+
+`sets` is a lazy table: `dbplyr` has only fetched the first few rows, to show us, so it does not know how many rows the table has without running another query.
 :::
 
 - [ ] Write `dplyr` code that answers the same question as Query 3 from Task 1. Use `show_query()` to compare the SQL that `dbplyr` generates with Query 3.
 
 ::: {.solution}
 
+```{r}
+year_most_sets <- sets |>
+    group_by(year) |>
+    summarise(n_sets = n()) |>
+    arrange(desc(n_sets)) |>
+    head(1)
+
+show_query(year_most_sets)
+collect(year_most_sets)
+```
+
+The generated SQL is the same as Query 3, apart from the backticks around names.
 :::
 
 - [ ] Write `dplyr` code to count the *top-level* themes, which have no parent. Use `show_query()` to see how `dbplyr` translates your code. Why would `filter(parent_id == NA)` not work?
 
 ::: {.solution}
+
+```{r}
+top_level <- themes |>
+    filter(is.na(parent_id)) |>
+    summarise(n_top_level = n())
+
+show_query(top_level)
+collect(top_level)
+```
+
+`dbplyr` translates `is.na(parent_id)` into `parent_id IS NULL`.
+`parent_id == NA` would compare each value with "unknown", which is never true, in `R` as well as in SQL; it is translated to `parent_id = NULL`, and keeps no rows:
+
+```{r}
+themes |>
+    filter(parent_id == NA) |>
+    summarise(n_top_level = n()) |>
+    collect()
+```
 
 :::
 
@@ -253,6 +349,59 @@ Next, we ask: are LEGO sets getting bigger?
 
 ::: {.solution}
 
+```{r}
+sets |>
+    group_by(year) |>
+    summarise(mean_parts = mean(num_parts, na.rm = TRUE), .groups = "drop") |>
+    collect() |>
+    ggplot(aes(x = year, y = mean_parts)) +
+    geom_line() +
+    labs(x = "Year", y = "Mean number of parts per set")
+```
+
+Everything before `collect()` runs in the database, so only one row per year is sent to `R`; `ggplot` then runs in `R`.
+(Without `na.rm = TRUE`, `dbplyr` warns that SQL always removes missing values when it aggregates.)
+
+```{r}
+sets |>
+    filter(num_parts == 0) |>
+    count(theme_id) |>
+    inner_join(themes, by = c("theme_id" = "id")) |>
+    arrange(desc(n)) |>
+    head(5) |>
+    collect()
+```
+
+Most of the sets with no parts are `Gear`, key chains and books: they are not building sets, so they should be left out of an average set size.
+
+```{r}
+sets |>
+    filter(num_parts > 0) |>
+    group_by(year) |>
+    summarise(mean_parts = mean(num_parts, na.rm = TRUE), .groups = "drop") |>
+    collect() |>
+    ggplot(aes(x = year, y = mean_parts)) +
+    geom_line() +
+    labs(x = "Year", y = "Mean number of parts per set")
+```
+
+Sets have grown: the mean number of parts has risen from under 50 in the 1950s to over 200 in the 2010s.
+Not every point is equally reliable, though.
+Counting the sets behind each mean shows that the spike in 1960 is based on just two sets, one of which has 476 parts:
+
+```{r}
+sets |>
+    filter(num_parts > 0, year %in% c(1959, 1960, 1961, 2016, 2017)) |>
+    group_by(year) |>
+    summarise(
+        n_sets = n(),
+        mean_parts = mean(num_parts, na.rm = TRUE),
+        .groups = "drop"
+    ) |>
+    collect()
+```
+
+The data also stop part of the way through 2017, so the last point is based on about half as many sets as 2016, and these may not be a typical selection of the year's sets.
 :::
 
 Finally, we compare doing the work in the database with doing it in `R`.
@@ -277,6 +426,27 @@ inventory_parts |>
 - [ ] Try calculating the 90th percentile of `num_parts` with `quantile()` in the database. What happens? How can you fix it?
 
 ::: {.solution}
+
+Both give the same result, but Pipeline 1 is better.
+It sums the quantities in the database and sends `R` one row per colour, whereas Pipeline 2 first copies all 580,069 rows of `inventory_parts` into `R`.
+
+`quantile()` has no translation into SQLite's SQL, so the query fails:
+
+```{r}
+#| error: true
+sets |>
+    summarise(p90 = quantile(num_parts, 0.9)) |>
+    collect()
+```
+
+To fix it, we collect just the column we need, and calculate the percentile in `R`:
+
+```{r}
+sets |>
+    select(num_parts) |>
+    collect() |>
+    summarise(p90 = quantile(num_parts, 0.9))
+```
 
 :::
 
